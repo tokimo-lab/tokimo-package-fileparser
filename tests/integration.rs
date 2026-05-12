@@ -104,6 +104,20 @@ fn parses_docx_with_image() {
     assert!(images.exists(), "expected images dir for docx");
     let imgs: Vec<_> = std::fs::read_dir(&images).unwrap().filter_map(|r| r.ok()).collect();
     assert!(!imgs.is_empty(), "expected at least one image extracted");
+    // DOCX stays flat — no per-page/slide grouping.
+    let has_subdir = imgs.iter().any(|e| e.path().is_dir());
+    assert!(
+        !has_subdir,
+        "docx images/ must be flat, found subdir: {:?}",
+        imgs.iter().map(|e| e.path()).collect::<Vec<_>>()
+    );
+    // Files at the top level should be `img-NNN.*`.
+    let has_flat_img = imgs.iter().any(|e| {
+        let name = e.file_name();
+        let s = name.to_string_lossy();
+        s.starts_with("img-") && e.path().is_file()
+    });
+    assert!(has_flat_img, "expected flat img-NNN.* in docx images/");
 }
 
 #[test]
@@ -150,6 +164,101 @@ fn parses_pdf_multiple_pages() {
     assert!(md.contains("中文 PDF 测试文档"));
     assert!(md.contains("Hello, world!"));
     assert!(md.contains("Rust 是一门系统编程语言"));
+}
+
+#[test]
+fn pdf_groups_images_by_page() {
+    let (folder, _) = run("sample.pdf");
+    let images = folder.join("images");
+    if !images.exists() {
+        // No images in this fixture → must not have created an empty dir.
+        return;
+    }
+    let entries: Vec<_> = std::fs::read_dir(&images).unwrap().filter_map(|r| r.ok()).collect();
+    let names: Vec<String> = entries
+        .iter()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    // Every top-level entry under images/ must be a `page-XXX` (or
+    // `page-unknown`) subdirectory — never a bare `img-NNN.*` file.
+    for e in &entries {
+        assert!(
+            e.path().is_dir(),
+            "expected only page-NNN subdirs under images/, got file: {:?}",
+            e.path()
+        );
+    }
+    assert!(
+        names.iter().any(|n| n.starts_with("page-")),
+        "expected at least one page-NNN subdir, got: {:?}",
+        names
+    );
+    // Confirm `images/page-001/` contains the expected `img-NNN.*` naming.
+    if let Some(first) = entries.iter().find(|e| {
+        e.file_name()
+            .to_string_lossy()
+            .starts_with("page-")
+    }) {
+        let inner: Vec<_> = std::fs::read_dir(first.path()).unwrap().filter_map(|r| r.ok()).collect();
+        assert!(!inner.is_empty(), "{:?} has no images", first.path());
+        for f in inner {
+            let n = f.file_name();
+            let s = n.to_string_lossy();
+            assert!(
+                s.starts_with("img-"),
+                "expected img-NNN.* inside {:?}, got {}",
+                first.path(),
+                s
+            );
+        }
+    }
+}
+
+#[test]
+fn pptx_groups_images_by_slide() {
+    let (folder, _) = run("sample.pptx");
+    let images = folder.join("images");
+    if !images.exists() {
+        // Fixture has no images — that's fine, just skip the layout check.
+        return;
+    }
+    let entries: Vec<_> = std::fs::read_dir(&images).unwrap().filter_map(|r| r.ok()).collect();
+    // The pptx fixture either has slide-NNN/ subdirs (when rel parsing
+    // succeeded) or — for images not referenced by any slide rel —
+    // flat fallback files. Assert at least one slide-NNN/ subdir.
+    let has_slide_dir = entries.iter().any(|e| {
+        e.path().is_dir()
+            && e.file_name().to_string_lossy().starts_with("slide-")
+    });
+    assert!(
+        has_slide_dir,
+        "expected at least one slide-NNN subdir under images/, got: {:?}",
+        entries.iter().map(|e| e.path()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn xlsx_groups_images_by_sheet_if_any() {
+    let (folder, _) = run("sample.xlsx");
+    let images = folder.join("images");
+    if !images.exists() {
+        return; // No images in fixture: must not have produced an empty dir.
+    }
+    let entries: Vec<_> = std::fs::read_dir(&images).unwrap().filter_map(|r| r.ok()).collect();
+    // If anything was written, ALL top-level entries should be sheet-NNN
+    // subdirs (or flat fallback files for images not tied to any sheet).
+    let dirs: Vec<String> = entries
+        .iter()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    if !dirs.is_empty() {
+        assert!(
+            dirs.iter().all(|d| d.starts_with("sheet-")),
+            "expected only sheet-NNN[-name] subdirs, got: {:?}",
+            dirs
+        );
+    }
 }
 
 #[test]

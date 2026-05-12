@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use lopdf::{Document as PdfDoc, Object, ObjectId};
+use lopdf::{Dictionary, Document as PdfDoc, Object, ObjectId};
 
 use crate::error::{ParseError, Result};
 
@@ -130,6 +130,8 @@ fn panic_message(panic: &Box<dyn std::any::Any + Send>) -> String {
 
 fn extract_pdf_images(input: &Path, images_dir: &Path) -> Result<Vec<String>> {
     let pdf = PdfDoc::load(input).map_err(|e| ParseError::Pdf(e.to_string()))?;
+    let image_to_page = build_image_page_map(&pdf);
+
     let mut out: Vec<String> = Vec::new();
     let mut seen: HashSet<ObjectId> = HashSet::new();
     let mut counter: u32 = 0;
@@ -176,16 +178,99 @@ fn extract_pdf_images(input: &Path, images_dir: &Path) -> Result<Vec<String>> {
             seen.insert(id);
             continue;
         }
-        if !images_dir.exists() {
-            fs::create_dir_all(images_dir)?;
+        let bucket = match image_to_page.get(&id) {
+            Some(page_num) => format!("page-{:03}", page_num),
+            None => "page-unknown".to_string(),
+        };
+        let bucket_dir = images_dir.join(&bucket);
+        if !bucket_dir.exists() {
+            fs::create_dir_all(&bucket_dir)?;
         }
         counter += 1;
         let filename = format!("img-{:03}.{ext}", counter);
-        fs::write(images_dir.join(&filename), &bytes)?;
-        out.push(format!("images/{filename}"));
+        fs::write(bucket_dir.join(&filename), &bytes)?;
+        out.push(format!("images/{bucket}/{filename}"));
         seen.insert(id);
     }
     Ok(out)
+}
+
+/// Walk every page's Resources / XObject dictionary and record the first page
+/// number each image-stream `ObjectId` appears on. Form-XObjects are recursed
+/// into so images nested inside form groups still get attributed correctly.
+fn build_image_page_map(pdf: &PdfDoc) -> HashMap<ObjectId, u32> {
+    let mut map: HashMap<ObjectId, u32> = HashMap::new();
+    for (&page_num, &page_id) in pdf.get_pages().iter() {
+        let Ok((own, inherited)) = pdf.get_page_resources(page_id) else {
+            continue;
+        };
+        let mut visited: HashSet<ObjectId> = HashSet::new();
+        if let Some(d) = own {
+            collect_xobjects(pdf, d, page_num, &mut map, &mut visited);
+        }
+        for id in inherited {
+            if let Ok(Object::Dictionary(d)) = pdf.get_object(id) {
+                collect_xobjects(pdf, d, page_num, &mut map, &mut visited);
+            }
+        }
+    }
+    map
+}
+
+fn collect_xobjects(
+    pdf: &PdfDoc,
+    dict: &Dictionary,
+    page_num: u32,
+    map: &mut HashMap<ObjectId, u32>,
+    visited: &mut HashSet<ObjectId>,
+) {
+    let Ok(xobj) = dict.get(b"XObject") else { return };
+    let xobj_dict: &Dictionary = match xobj {
+        Object::Dictionary(d) => d,
+        Object::Reference(id) => match pdf.get_object(*id) {
+            Ok(Object::Dictionary(d)) => d,
+            _ => return,
+        },
+        _ => return,
+    };
+    for (_, val) in xobj_dict.iter() {
+        let Ok(ref_id) = val.as_reference() else { continue };
+        if !visited.insert(ref_id) {
+            continue;
+        }
+        map.entry(ref_id)
+            .and_modify(|p| {
+                if page_num < *p {
+                    *p = page_num;
+                }
+            })
+            .or_insert(page_num);
+        // Recurse into Form XObjects so nested images get the right page.
+        if let Ok(Object::Stream(stream)) = pdf.get_object(ref_id) {
+            let is_form = stream
+                .dict
+                .get(b"Subtype")
+                .ok()
+                .and_then(|o| o.as_name().ok())
+                .map(|n| n == b"Form")
+                .unwrap_or(false);
+            if is_form
+                && let Ok(res) = stream.dict.get(b"Resources")
+            {
+                let res_dict: Option<&Dictionary> = match res {
+                    Object::Dictionary(d) => Some(d),
+                    Object::Reference(id) => match pdf.get_object(*id) {
+                        Ok(Object::Dictionary(d)) => Some(d),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(d) = res_dict {
+                    collect_xobjects(pdf, d, page_num, map, visited);
+                }
+            }
+        }
+    }
 }
 
 fn filter_to_name(obj: &Object) -> Option<String> {
