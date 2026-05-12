@@ -49,12 +49,7 @@ pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     for (i, section) in ir.sections.iter().enumerate() {
         let mut section_clone = section.clone();
         let bucket = section_bucket(kind, i, section_clone.title.as_deref());
-        let saved = save_section_images(
-            &mut section_clone,
-            &images_dir,
-            bucket.as_deref(),
-            &mut image_counter,
-        )?;
+        let saved = save_section_images(&mut section_clone, &images_dir, bucket.as_deref(), &mut image_counter)?;
 
         // For long flowing content (typical DOCX) one Section may carry the
         // whole document. Try to split it further so a 200-page Word doesn't
@@ -457,12 +452,7 @@ where
     Ok(())
 }
 
-fn persist_image(
-    img: &Image,
-    images_dir: &Path,
-    bucket: Option<&str>,
-    counter: &mut u32,
-) -> Result<Option<String>> {
+fn persist_image(img: &Image, images_dir: &Path, bucket: Option<&str>, counter: &mut u32) -> Result<Option<String>> {
     let Some(bytes) = img.data.as_ref() else {
         return Ok(None);
     };
@@ -549,9 +539,7 @@ fn build_zip_media_buckets(
             // directly via `Target="../media/imageN.png"`.
             for name in names {
                 let lower = name.to_ascii_lowercase();
-                if !(lower.starts_with("ppt/slides/_rels/")
-                    && lower.ends_with(".xml.rels")
-                    && lower.contains("/slide"))
+                if !(lower.starts_with("ppt/slides/_rels/") && lower.ends_with(".xml.rels") && lower.contains("/slide"))
                 {
                     continue;
                 }
@@ -611,7 +599,9 @@ fn build_zip_media_buckets(
                     .replacen("xl/drawings/_rels/", "xl/drawings/", 1)
                     .trim_end_matches(".rels")
                     .to_string();
-                let Some(&sheet_num) = drawing_to_sheet.get(&drawing_path) else { continue };
+                let Some(&sheet_num) = drawing_to_sheet.get(&drawing_path) else {
+                    continue;
+                };
                 let bucket = format!("sheet-{:03}", sheet_num);
                 let Some(xml) = read_zip_text(zip, name) else { continue };
                 for target in extract_targets(&xml) {
@@ -637,13 +627,8 @@ fn read_zip_text(zip: &mut zip::ZipArchive<fs::File>, name: &str) -> Option<Stri
 /// Strip the trailing `.xml.rels` so callers can run `parse_numeric_suffix`
 /// over the bare file stem (e.g. `slide12` or `sheet3`).
 fn name_stem_no_xml_rels(name: &str) -> String {
-    let file = Path::new(name)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(name);
-    file.trim_end_matches(".rels")
-        .trim_end_matches(".xml")
-        .to_string()
+    let file = Path::new(name).file_name().and_then(|s| s.to_str()).unwrap_or(name);
+    file.trim_end_matches(".rels").trim_end_matches(".xml").to_string()
 }
 
 /// Returns the trailing `u32` from a stem matching `<prefix>NN`.
@@ -697,11 +682,7 @@ fn resolve_rel_target(base_dir: &str, target: &str) -> Option<String> {
             s => parts.push(s),
         }
     }
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("/"))
-    }
+    if parts.is_empty() { None } else { Some(parts.join("/")) }
 }
 
 fn is_media_path(p: &str) -> bool {
@@ -753,10 +734,7 @@ mod tests {
     #[test]
     fn section_bucket_layout() {
         assert_eq!(section_bucket(OfficeKind::Flat, 0, Some("anything")), None);
-        assert_eq!(
-            section_bucket(OfficeKind::Pptx, 0, None).as_deref(),
-            Some("slide-001")
-        );
+        assert_eq!(section_bucket(OfficeKind::Pptx, 0, None).as_deref(), Some("slide-001"));
         assert_eq!(
             section_bucket(OfficeKind::Pptx, 11, Some("Title")).as_deref(),
             Some("slide-012")
@@ -765,10 +743,7 @@ mod tests {
             section_bucket(OfficeKind::Xlsx, 0, Some("Sales 2024")).as_deref(),
             Some("sheet-001-Sales 2024")
         );
-        assert_eq!(
-            section_bucket(OfficeKind::Xlsx, 2, None).as_deref(),
-            Some("sheet-003")
-        );
+        assert_eq!(section_bucket(OfficeKind::Xlsx, 2, None).as_deref(), Some("sheet-003"));
         assert_eq!(
             section_bucket(OfficeKind::Xlsx, 0, Some("")).as_deref(),
             Some("sheet-001")

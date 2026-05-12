@@ -194,12 +194,14 @@ fn pdf_groups_images_by_page() {
         names
     );
     // Confirm `images/page-001/` contains the expected `img-NNN.*` naming.
-    if let Some(first) = entries.iter().find(|e| {
-        e.file_name()
-            .to_string_lossy()
-            .starts_with("page-")
-    }) {
-        let inner: Vec<_> = std::fs::read_dir(first.path()).unwrap().filter_map(|r| r.ok()).collect();
+    if let Some(first) = entries
+        .iter()
+        .find(|e| e.file_name().to_string_lossy().starts_with("page-"))
+    {
+        let inner: Vec<_> = std::fs::read_dir(first.path())
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
         assert!(!inner.is_empty(), "{:?} has no images", first.path());
         for f in inner {
             let n = f.file_name();
@@ -226,10 +228,9 @@ fn pptx_groups_images_by_slide() {
     // The pptx fixture either has slide-NNN/ subdirs (when rel parsing
     // succeeded) or — for images not referenced by any slide rel —
     // flat fallback files. Assert at least one slide-NNN/ subdir.
-    let has_slide_dir = entries.iter().any(|e| {
-        e.path().is_dir()
-            && e.file_name().to_string_lossy().starts_with("slide-")
-    });
+    let has_slide_dir = entries
+        .iter()
+        .any(|e| e.path().is_dir() && e.file_name().to_string_lossy().starts_with("slide-"));
     assert!(
         has_slide_dir,
         "expected at least one slide-NNN subdir under images/, got: {:?}",

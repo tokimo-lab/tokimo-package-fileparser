@@ -37,10 +37,7 @@ mod tests {
 
     #[test]
     fn replaces_illegal_chars() {
-        assert_eq!(
-            sanitize_filename("a/b\\c:d*e?f\"g<h>i|j"),
-            "a_b_c_d_e_f_g_h_i_j"
-        );
+        assert_eq!(sanitize_filename("a/b\\c:d*e?f\"g<h>i|j"), "a_b_c_d_e_f_g_h_i_j");
     }
 
     #[test]

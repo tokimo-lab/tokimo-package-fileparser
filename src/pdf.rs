@@ -254,9 +254,7 @@ fn collect_xobjects(
                 .and_then(|o| o.as_name().ok())
                 .map(|n| n == b"Form")
                 .unwrap_or(false);
-            if is_form
-                && let Ok(res) = stream.dict.get(b"Resources")
-            {
+            if is_form && let Ok(res) = stream.dict.get(b"Resources") {
                 let res_dict: Option<&Dictionary> = match res {
                     Object::Dictionary(d) => Some(d),
                     Object::Reference(id) => match pdf.get_object(*id) {
