@@ -25,6 +25,13 @@ pub fn sanitize_filename(s: &str) -> String {
     }
 }
 
+pub fn input_stem(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .map(sanitize_filename)
+        .unwrap_or_else(|| "output".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,11 +79,4 @@ mod tests {
         assert_eq!(sanitize_filename("文档"), "文档");
         assert_eq!(sanitize_filename("résumé"), "résumé");
     }
-}
-
-pub fn input_stem(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .map(sanitize_filename)
-        .unwrap_or_else(|| "output".to_string())
 }
