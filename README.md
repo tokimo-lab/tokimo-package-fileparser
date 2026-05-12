@@ -1,6 +1,6 @@
 # tokimo-package-fileparser
 
-Pure-Rust unified file parser: PDF / DOCX / XLSX / PPTX / DOC / XLS / PPT / TXT / MD / CSV / JSON → Markdown, with embedded images extracted to disk.
+Pure-Rust unified file parser: PDF / DOCX / XLSX / PPTX / DOC / XLS / PPT / TXT / CSV / JSON → Markdown, with embedded images extracted to disk.
 
 ## Features
 
@@ -30,7 +30,6 @@ Pure-Rust unified file parser: PDF / DOCX / XLSX / PPTX / DOC / XLS / PPT / TXT 
 | `.xlsx`, `.xlsm`, `.xls` | per worksheet | `office_oxide` IR |
 | `.pptx`, `.ppt` | per slide | `office_oxide` IR |
 | `.txt`, `.log` | single `content.md` | encoding auto-detected |
-| `.md`, `.markdown` | pass-through | |
 | `.csv`, `.tsv` | single Markdown table | |
 | `.json` | single fenced code block | |
 | `.htm`, `.html` | **opt-in** via `--features html` | off by default |
@@ -79,7 +78,7 @@ cargo run --example parse -- attention.pdf ./out
 ├── page-001.md            (PDF / DOCX-with-page-breaks)
 ├── page-002.md
 ├── section-001-<title>.md (XLSX sheets / PPTX slides / DOCX sections)
-├── content.md             (txt/md/csv/json)
+├── content.md             (txt/csv/json)
 ├── images.md              (gallery — only when images were extracted)
 ├── media.md               (audio/video listing — OOXML only, when present)
 ├── embeddings.md          (embedded objects/attachments — when present)

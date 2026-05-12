@@ -12,7 +12,6 @@ pub enum FileKind {
     Xls,
     Ppt,
     Txt,
-    Markdown,
     Csv,
     #[cfg(feature = "html")]
     Html,
@@ -36,7 +35,6 @@ impl FileKind {
             "xls" => FileKind::Xls,
             "ppt" => FileKind::Ppt,
             "txt" | "log" => FileKind::Txt,
-            "md" | "markdown" => FileKind::Markdown,
             "csv" | "tsv" => FileKind::Csv,
             #[cfg(feature = "html")]
             "htm" | "html" => FileKind::Html,

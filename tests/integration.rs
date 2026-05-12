@@ -41,13 +41,6 @@ fn parses_txt() {
 }
 
 #[test]
-fn parses_markdown_passthrough() {
-    let (folder, _) = run("sample.md");
-    let md = read_all_md(&folder);
-    assert!(md.contains("# 中文标题"));
-}
-
-#[test]
 fn parses_csv() {
     let (folder, _) = run("sample.csv");
     let md = read_all_md(&folder);

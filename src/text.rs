@@ -41,11 +41,6 @@ pub fn txt_to_dir(path: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     Ok(vec![write_single(dest, "content.md", md)?])
 }
 
-pub fn markdown_to_dir(path: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
-    let content = read_text_auto_encoding(path)?;
-    Ok(vec![write_single(dest, "content.md", content)?])
-}
-
 pub fn csv_to_dir(path: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     let content = read_text_auto_encoding(path)?;
     let delimiter = if path

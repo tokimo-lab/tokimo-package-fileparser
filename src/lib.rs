@@ -10,7 +10,7 @@
 //!   format (`png`, `jpg`, `tif`, `emf`, etc.) when the source contains any.
 //!
 //! Supported extensions: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xlsm`, `.xls`,
-//! `.pptx`, `.ppt`, `.txt`, `.log`, `.md`, `.markdown`, `.csv`, `.tsv`,
+//! `.pptx`, `.ppt`, `.txt`, `.log`, `.csv`, `.tsv`,
 //! `.htm`, `.html`, `.json`.
 //!
 //! All decoders are pure Rust — no C/C++ libs, no `pdfium`, no system fonts.
@@ -52,9 +52,6 @@ pub fn parse(input: impl AsRef<Path>, output_dir: impl AsRef<Path>) -> Result<Pa
         }
         FileKind::Txt => {
             text::txt_to_dir(input, &dest)?;
-        }
-        FileKind::Markdown => {
-            text::markdown_to_dir(input, &dest)?;
         }
         FileKind::Csv => {
             text::csv_to_dir(input, &dest)?;
