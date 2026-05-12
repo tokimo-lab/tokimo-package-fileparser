@@ -18,10 +18,21 @@ pub enum FileKind {
     Html,
     #[cfg(feature = "json")]
     Json,
+    /// Any archive supported by `tokimo-universal-archiver`
+    /// (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`/`.tbz2`, `.tar.xz`/`.txz`,
+    /// `.tar.zst`/`.tzst`, `.7z`, `.rar`, `.gz`, `.bz2`, `.xz`, `.zst`).
+    Archive,
 }
 
 impl FileKind {
     pub fn from_path(path: &Path) -> Result<Self> {
+        // Archive formats use compound extensions (e.g. `.tar.gz`) so try the
+        // archive detector first — it understands those, and it covers
+        // single-extension archives (`.zip`, `.7z`, …) too.
+        if crate::archive::is_archive(path) {
+            return Ok(FileKind::Archive);
+        }
+
         let ext = path
             .extension()
             .and_then(|s| s.to_str())

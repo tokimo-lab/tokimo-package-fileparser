@@ -16,6 +16,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2-zli
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tokimo-universal-archiver = { git = "https://github.com/tokimo-lab/tokimo-package-universal-archiver" }
 
 [features]
 default = []
@@ -32,6 +33,7 @@ json = []
 
 [dev-dependencies]
 tempfile = "3"
+tokimo-universal-archiver = { git = "https://github.com/tokimo-lab/tokimo-package-universal-archiver" }
 
 [[example]]
 name = "parse"

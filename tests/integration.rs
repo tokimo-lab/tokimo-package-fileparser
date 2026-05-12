@@ -295,6 +295,136 @@ fn parse_output_has_json_and_tree() {
     assert!(json.contains("page-001.md"));
 }
 
+/// Helper: create a small directory tree under `root` containing
+/// `inner/hello.txt` and `inner/sub/world.txt`, return the paths to feed
+/// into `archiver::create`.
+fn make_archive_sources(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let inner = root.join("inner");
+    let sub = inner.join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::write(inner.join("hello.txt"), b"hello world\n").unwrap();
+    std::fs::write(sub.join("world.txt"), "再见\n".as_bytes()).unwrap();
+    vec![inner]
+}
+
+#[test]
+fn parses_zip_archive() {
+    let work = tempfile::tempdir().unwrap();
+    let sources = make_archive_sources(work.path());
+
+    let archive_path = work.path().join("bundle.zip");
+    archiver::create(&archive_path, &sources, None).expect("create zip");
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let res = parse(&archive_path, out_dir.path()).expect("parse zip");
+
+    assert!(res.dir.exists(), "extracted dir missing: {:?}", res.dir);
+    assert_eq!(res.dir.file_name().unwrap(), "bundle");
+
+    // The tree string must include the extracted entries.
+    assert!(res.tree.contains("hello.txt"), "tree missing hello.txt:\n{}", res.tree);
+    assert!(res.tree.contains("world.txt"), "tree missing world.txt:\n{}", res.tree);
+
+    // JSON serialisation still carries dir / files / tree.
+    let json = res.to_json();
+    assert!(json.contains("\"dir\""));
+    assert!(json.contains("\"files\""));
+    assert!(json.contains("\"tree\""));
+    assert!(json.contains("hello.txt"));
+
+    // Content round-trip.
+    let extracted = std::fs::read_to_string(res.dir.join("inner").join("hello.txt")).unwrap();
+    assert_eq!(extracted, "hello world\n");
+}
+
+#[test]
+fn parses_tar_gz_archive() {
+    let work = tempfile::tempdir().unwrap();
+    let sources = make_archive_sources(work.path());
+
+    let archive_path = work.path().join("bundle.tar.gz");
+    archiver::create(&archive_path, &sources, None).expect("create tar.gz");
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let res = parse(&archive_path, out_dir.path()).expect("parse tar.gz");
+
+    // `.tar.gz` keeps a `.tar` suffix on the stem because `Path::file_stem`
+    // only strips the final extension — we still get a deterministic folder.
+    assert!(res.dir.exists());
+    assert!(res.tree.contains("hello.txt"));
+    assert!(res.tree.contains("world.txt"));
+}
+
+#[test]
+fn parses_seven_zip_archive() {
+    let work = tempfile::tempdir().unwrap();
+    let sources = make_archive_sources(work.path());
+
+    let archive_path = work.path().join("bundle.7z");
+    archiver::create(&archive_path, &sources, None).expect("create 7z");
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let res = parse(&archive_path, out_dir.path()).expect("parse 7z");
+
+    assert!(res.dir.exists());
+    assert!(res.tree.contains("hello.txt"), "tree:\n{}", res.tree);
+}
+
+#[test]
+fn archive_over_limit_is_rejected() {
+    use tokimo_package_fileparser::{ParseOptions, parse_with_options};
+
+    let work = tempfile::tempdir().unwrap();
+    let sources = make_archive_sources(work.path());
+    let archive_path = work.path().join("bundle.zip");
+    archiver::create(&archive_path, &sources, None).expect("create zip");
+
+    let archive_size = std::fs::metadata(&archive_path).unwrap().len();
+    assert!(archive_size > 0);
+
+    let out_dir = tempfile::tempdir().unwrap();
+    // Set the cap to one byte below the actual archive size — should be rejected.
+    let opts = ParseOptions {
+        max_archive_bytes: archive_size - 1,
+        ..Default::default()
+    };
+    let err = parse_with_options(&archive_path, out_dir.path(), &opts).unwrap_err();
+    let msg = format!("{err}");
+    assert!(msg.contains("too large"), "msg: {msg}");
+    assert!(msg.contains(&archive_size.to_string()), "msg: {msg}");
+}
+
+#[test]
+fn parses_password_protected_zip() {
+    use tokimo_package_fileparser::{ParseOptions, parse_with_options};
+
+    let work = tempfile::tempdir().unwrap();
+    let sources = make_archive_sources(work.path());
+
+    let archive_path = work.path().join("secret.zip");
+    let create_opts = archiver::types::CreateOptions {
+        password: Some("hunter2".into()),
+        ..Default::default()
+    };
+    archiver::create(&archive_path, &sources, Some(&create_opts)).expect("create encrypted zip");
+
+    // Without password → error.
+    let out_dir = tempfile::tempdir().unwrap();
+    let err = parse(&archive_path, out_dir.path()).unwrap_err();
+    assert!(format!("{err}").contains("archive"), "err: {err}");
+
+    // With correct password → success and contents present.
+    let out_dir = tempfile::tempdir().unwrap();
+    let opts = ParseOptions {
+        archive_password: Some("hunter2".into()),
+        ..Default::default()
+    };
+    let res = parse_with_options(&archive_path, out_dir.path(), &opts).expect("parse encrypted");
+    assert!(res.tree.contains("hello.txt"), "tree:\n{}", res.tree);
+    let extracted = std::fs::read_to_string(res.dir.join("inner").join("hello.txt")).unwrap();
+    assert_eq!(extracted, "hello world\n");
+}
+
 #[test]
 fn rejects_unknown_extension() {
     let tmp = tempfile::NamedTempFile::with_suffix(".xyz").unwrap();

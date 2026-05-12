@@ -33,6 +33,7 @@ Pure-Rust unified file parser: PDF / DOCX / XLSX / PPTX / DOC / XLS / PPT / TXT 
 | `.txt`, `.log` | **opt-in** via `--features text` | off by default |
 | `.htm`, `.html` | **opt-in** via `--features html` | off by default |
 | `.json` | **opt-in** via `--features json` | off by default |
+| `.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`/`.tbz2`, `.tar.xz`/`.txz`, `.tar.zst`/`.tzst`, `.7z`, `.rar`, `.gz`, `.bz2`, `.xz`, `.zst` | fully extracted into `<out_dir>/<stem>/` (default cap 1 GiB, override via `ParseOptions::max_archive_bytes`) | via [`tokimo-universal-archiver`](https://github.com/tokimo-lab/tokimo-package-universal-archiver) |
 
 Anything else returns `ParseError::UnsupportedExtension`.
 
