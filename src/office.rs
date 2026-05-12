@@ -98,13 +98,37 @@ pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     }
 
     // Fallback: many docx/xlsx/pptx images are not surfaced by office_oxide
-    // (it skips drawing/anchor/inline) – pull everything under `*/media/` via zip.
-    let zip_images = extract_zip_media(input, &images_dir, &mut image_counter).unwrap_or_default();
-    if !zip_images.is_empty() {
+    // (it skips drawing/anchor/inline). Also OOXML zips can carry non-image
+    // media (audio/video) and embedded objects (xlsx-in-docx, OLE blobs, etc.).
+    // Pull everything under `*/media/` and `*/embeddings/` directly from the zip.
+    let assets = extract_zip_assets(input, dest, &mut image_counter).unwrap_or_default();
+    let images: Vec<&ExtractedAsset> = assets.iter().filter(|a| a.kind == AssetKind::Image).collect();
+    let media: Vec<&ExtractedAsset> = assets.iter().filter(|a| a.kind == AssetKind::Media).collect();
+    let embeds: Vec<&ExtractedAsset> = assets.iter().filter(|a| a.kind == AssetKind::Embedding).collect();
+
+    if !images.is_empty() {
         let path = dest.join("images.md");
-        let mut md = String::from("# Embedded media\n\n");
-        for rel in &zip_images {
-            md.push_str(&format!("![]({rel})\n\n"));
+        let mut md = String::from("# Embedded images\n\n");
+        for a in &images {
+            md.push_str(&format!("![]({})\n\n", a.rel));
+        }
+        fs::write(&path, md)?;
+        written.push(path);
+    }
+    if !media.is_empty() {
+        let path = dest.join("media.md");
+        let mut md = String::from("# Embedded media (audio/video/other)\n\n");
+        for a in &media {
+            md.push_str(&format!("- [{}]({})\n", a.original, a.rel));
+        }
+        fs::write(&path, md)?;
+        written.push(path);
+    }
+    if !embeds.is_empty() {
+        let path = dest.join("embeddings.md");
+        let mut md = String::from("# Embedded objects\n\n");
+        for a in &embeds {
+            md.push_str(&format!("- [{}]({})\n", a.original, a.rel));
         }
         fs::write(&path, md)?;
         written.push(path);
@@ -113,20 +137,40 @@ pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     Ok(written)
 }
 
-fn extract_zip_media(input: &Path, images_dir: &Path, counter: &mut u32) -> Result<Vec<String>> {
+#[derive(PartialEq, Eq)]
+enum AssetKind {
+    Image,
+    Media,
+    Embedding,
+}
+
+struct ExtractedAsset {
+    kind: AssetKind,
+    rel: String,
+    original: String,
+}
+
+fn extract_zip_assets(input: &Path, dest: &Path, image_counter: &mut u32) -> Result<Vec<ExtractedAsset>> {
     let file = fs::File::open(input)?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| ParseError::Zip(e.to_string()))?;
-    let mut out = Vec::new();
+    let mut out: Vec<ExtractedAsset> = Vec::new();
+    let mut media_counter: u32 = 0;
+    let mut embed_counter: u32 = 0;
     let names: Vec<String> = (0..zip.len())
         .filter_map(|i| zip.by_index(i).ok().map(|f| f.name().to_string()))
         .collect();
 
     for name in names {
         let lower = name.to_ascii_lowercase();
-        let in_media = lower.contains("/media/") && !lower.ends_with('/') && is_image_name(&lower);
-        if !in_media {
+        if lower.ends_with('/') {
             continue;
         }
+        let in_media = lower.contains("/media/");
+        let in_embed = lower.contains("/embeddings/") || lower.contains("/oleobject");
+        if !in_media && !in_embed {
+            continue;
+        }
+
         let mut entry = match zip.by_name(&name) {
             Ok(e) => e,
             Err(_) => continue,
@@ -135,29 +179,51 @@ fn extract_zip_media(input: &Path, images_dir: &Path, counter: &mut u32) -> Resu
         if entry.read_to_end(&mut buf).is_err() || buf.is_empty() {
             continue;
         }
+        let original = Path::new(&name)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&name)
+            .to_string();
         let ext = Path::new(&name)
             .extension()
             .and_then(|s| s.to_str())
             .map(|s| s.to_ascii_lowercase())
             .or_else(|| sniff_extension(&buf).map(|s| s.to_string()))
             .unwrap_or_else(|| "bin".to_string());
-        if !images_dir.exists() {
-            fs::create_dir_all(images_dir)?;
+
+        let (kind, sub, filename) = if in_embed {
+            embed_counter += 1;
+            (
+                AssetKind::Embedding,
+                "embeddings",
+                format!("embed-{:03}-{}", embed_counter, sanitize_filename(&original)),
+            )
+        } else if is_image_ext(&ext) {
+            *image_counter += 1;
+            (AssetKind::Image, "images", format!("img-{:03}.{ext}", *image_counter))
+        } else {
+            media_counter += 1;
+            (AssetKind::Media, "media", format!("media-{:03}.{ext}", media_counter))
+        };
+        let sub_dir = dest.join(sub);
+        if !sub_dir.exists() {
+            fs::create_dir_all(&sub_dir)?;
         }
-        *counter += 1;
-        let filename = format!("img-{:03}.{ext}", *counter);
-        fs::write(images_dir.join(&filename), &buf)?;
-        out.push(format!("images/{filename}"));
+        fs::write(sub_dir.join(&filename), &buf)?;
+        out.push(ExtractedAsset {
+            kind,
+            rel: format!("{sub}/{filename}"),
+            original,
+        });
     }
     Ok(out)
 }
 
-fn is_image_name(lower: &str) -> bool {
-    [
-        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".emf", ".wmf", ".svg",
-    ]
-    .iter()
-    .any(|e| lower.ends_with(e))
+fn is_image_ext(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "tif" | "tiff" | "webp" | "emf" | "wmf" | "svg"
+    )
 }
 
 #[derive(Clone)]

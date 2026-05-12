@@ -14,6 +14,8 @@ pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
 
     let images_dir = dest.join("images");
     let extracted_images = extract_pdf_images(input, &images_dir).unwrap_or_default();
+    let embeds_dir = dest.join("embeddings");
+    let extracted_embeds = extract_pdf_embedded_files(input, &embeds_dir).unwrap_or_default();
 
     for (i, page) in pages.iter().enumerate() {
         let path = dest.join(format!("page-{:03}.md", i + 1));
@@ -37,7 +39,64 @@ pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
         written.push(path);
     }
 
+    if !extracted_embeds.is_empty() {
+        let path = dest.join("embeddings.md");
+        let mut md = String::from("# Embedded files\n\n");
+        for (rel, original) in &extracted_embeds {
+            md.push_str(&format!("- [{original}]({rel})\n"));
+        }
+        fs::write(&path, md)?;
+        written.push(path);
+    }
+
     Ok(written)
+}
+
+fn extract_pdf_embedded_files(input: &Path, dest: &Path) -> Result<Vec<(String, String)>> {
+    let pdf = PdfDoc::load(input).map_err(|e| ParseError::Pdf(e.to_string()))?;
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut counter: u32 = 0;
+
+    // Walk every Filespec dict / EmbeddedFile stream in the document.
+    // PDF spec: file specs live under /Catalog/Names/EmbeddedFiles or as
+    // /Annot /Subtype /FileAttachment. Easier: scan every dictionary for /EF.
+    for (_id, obj) in pdf.objects.iter() {
+        let Object::Dictionary(dict) = obj else {
+            continue;
+        };
+        let Ok(ef) = dict.get(b"EF") else { continue };
+        let Ok(ef_dict) = ef.as_dict() else { continue };
+        let stream_ref = ef_dict.get(b"UF").or_else(|_| ef_dict.get(b"F")).ok();
+        let Some(stream_obj) = stream_ref else {
+            continue;
+        };
+        let Ok(stream_id) = stream_obj.as_reference() else {
+            continue;
+        };
+        let Ok(Object::Stream(stream)) = pdf.get_object(stream_id) else {
+            continue;
+        };
+        let bytes = stream.decompressed_content().unwrap_or_else(|_| stream.content.clone());
+        if bytes.is_empty() {
+            continue;
+        }
+        let original = dict
+            .get(b"UF")
+            .or_else(|_| dict.get(b"F"))
+            .ok()
+            .and_then(|o| o.as_str().ok())
+            .map(|b| String::from_utf8_lossy(b).into_owned())
+            .unwrap_or_else(|| format!("file-{counter:03}.bin"));
+        if !dest.exists() {
+            fs::create_dir_all(dest)?;
+        }
+        counter += 1;
+        let safe = crate::util::sanitize_filename(&original);
+        let filename = format!("embed-{counter:03}-{safe}");
+        fs::write(dest.join(&filename), &bytes)?;
+        out.push((format!("embeddings/{filename}"), original));
+    }
+    Ok(out)
 }
 
 fn extract_pages_safe(path: &Path) -> Result<Vec<String>> {

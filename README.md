@@ -11,9 +11,13 @@ Pure-Rust unified file parser: PDF / DOCX / XLSX / PPTX / DOC / XLS / PPT / TXT 
   - XLSX / XLSM → one `section-NNN-<sheet>.md` per worksheet
   - PPTX → one `section-NNN-<slide-title>.md` per slide
   - DOCX → splits on `<w:br w:type="page"/>` page breaks (the common Word page break). Falls back to H1-based chapter split, then to a fixed-element cap so even unstructured long documents don't collapse into one file.
-- **Embedded image extraction**
-  - DOCX / XLSX / PPTX → everything under `word/media/*`, `xl/media/*`, `ppt/media/*` is pulled out of the OOXML zip
-  - PDF → every `Subtype=Image` XObject is decoded (DCTDecode → `.jpg`, JPXDecode → `.jp2`, raster DeviceGray/DeviceRGB → re-encoded `.png`)
+- **Embedded asset extraction**
+  - **OOXML (DOCX/XLSX/PPTX)**:
+    - Images under `*/media/*.{png,jpg,gif,bmp,tif,webp,emf,wmf,svg}` → `images/`
+    - Other media (audio/video) under `*/media/*` → `media/`
+    - Embedded objects (e.g. `xl/embeddings/oleObject1.bin`, embedded xlsx-in-docx) → `embeddings/`
+  - **PDF**: every `Subtype=Image` XObject is decoded (DCTDecode → `.jpg`, JPXDecode → `.jp2`, raster DeviceGray/DeviceRGB → re-encoded `.png`) into `images/`. PDF `/EF` file attachments (embedded files) are extracted with their original filenames into `embeddings/`.
+  - Each non-empty bucket gets a sibling `images.md` / `media.md` / `embeddings.md` listing for easy review.
 - **CJK / Chinese support** — text files auto-detect UTF-8 / GBK / UTF-16, and properly-tagged PDFs (Word / WeasyPrint / Acrobat output) extract mixed Chinese + English without issue.
 - **Structured return value** — `parse()` returns a `ParseOutput { dir, files, tree }` that serialises directly to JSON, with both a recursive `files` tree (`{type, name, path, size, children}`) and a human-readable `tree(1)`-style string.
 
@@ -76,10 +80,16 @@ cargo run --example parse -- attention.pdf ./out
 ├── page-002.md
 ├── section-001-<title>.md (XLSX sheets / PPTX slides / DOCX sections)
 ├── content.md             (txt/md/csv/json)
-├── images.md              (gallery markdown — only when images were extracted)
-└── images/
-    ├── img-001.png
-    └── img-002.jpg
+├── images.md              (gallery — only when images were extracted)
+├── media.md               (audio/video listing — OOXML only, when present)
+├── embeddings.md          (embedded objects/attachments — when present)
+├── images/
+│   ├── img-001.png
+│   └── img-002.jpg
+├── media/
+│   └── media-001.mp3
+└── embeddings/
+    └── embed-001-oleObject1.bin
 ```
 
 ## Building
