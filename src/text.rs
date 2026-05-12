@@ -28,6 +28,7 @@ fn write_single(dest: &Path, name: &str, content: String) -> Result<PathBuf> {
     Ok(path)
 }
 
+#[cfg(feature = "text")]
 pub fn txt_to_dir(path: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     let content = read_text_auto_encoding(path)?;
     let title = path.file_name().and_then(|s| s.to_str()).unwrap_or("document");
@@ -196,6 +197,7 @@ fn strip_html_tags(input: &str) -> String {
     collapsed
 }
 
+#[cfg(feature = "json")]
 pub fn json_to_dir(path: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     let content = read_text_auto_encoding(path)?;
     let title = path.file_name().and_then(|s| s.to_str()).unwrap_or("document");

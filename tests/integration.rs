@@ -33,11 +33,21 @@ fn read_all_md(folder: &PathBuf) -> String {
     buf
 }
 
+#[cfg(feature = "text")]
 #[test]
 fn parses_txt() {
     let (folder, _) = run("sample.txt");
     let md = read_all_md(&folder);
     assert!(md.contains("中文"), "missing chinese: {md}");
+}
+
+#[cfg(not(feature = "text"))]
+#[test]
+fn txt_is_rejected_without_feature() {
+    let tmp = tempfile::tempdir().unwrap();
+    let err = parse(fixtures().join("sample.txt"), tmp.path()).unwrap_err();
+    let msg = format!("{err}");
+    assert!(msg.contains("text"), "expected text-feature message, got: {msg}");
 }
 
 #[test]
@@ -66,12 +76,22 @@ fn html_is_rejected_without_feature() {
     assert!(msg.contains("html"), "expected html-feature message, got: {msg}");
 }
 
+#[cfg(feature = "json")]
 #[test]
 fn parses_json() {
     let (folder, _) = run("sample.json");
     let md = read_all_md(&folder);
     assert!(md.contains("张三"));
     assert!(md.contains("```json"));
+}
+
+#[cfg(not(feature = "json"))]
+#[test]
+fn json_is_rejected_without_feature() {
+    let tmp = tempfile::tempdir().unwrap();
+    let err = parse(fixtures().join("sample.json"), tmp.path()).unwrap_err();
+    let msg = format!("{err}");
+    assert!(msg.contains("json"), "expected json-feature message, got: {msg}");
 }
 
 #[test]

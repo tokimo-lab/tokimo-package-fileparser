@@ -29,10 +29,10 @@ Pure-Rust unified file parser: PDF / DOCX / XLSX / PPTX / DOC / XLS / PPT / TXT 
 | `.docx`, `.doc` | per page break (with fallbacks) | `office_oxide` IR |
 | `.xlsx`, `.xlsm`, `.xls` | per worksheet | `office_oxide` IR |
 | `.pptx`, `.ppt` | per slide | `office_oxide` IR |
-| `.txt`, `.log` | single `content.md` | encoding auto-detected |
 | `.csv`, `.tsv` | single Markdown table | |
-| `.json` | single fenced code block | |
+| `.txt`, `.log` | **opt-in** via `--features text` | off by default |
 | `.htm`, `.html` | **opt-in** via `--features html` | off by default |
+| `.json` | **opt-in** via `--features json` | off by default |
 
 Anything else returns `ParseError::UnsupportedExtension`.
 
@@ -40,7 +40,9 @@ Anything else returns `ParseError::UnsupportedExtension`.
 
 | Feature | Default | Purpose |
 |---|---|---|
+| `text` | off | Routes `.txt`/`.log` through a plain-text Markdown extractor. Off by default. With the feature disabled, text inputs return `ParseError::UnsupportedExtension`. |
 | `html` | off | Routes `.htm`/`.html` through a tag-stripping Markdown extractor. Off by default — most callers should not be parsing arbitrary HTML through a document parser. With the feature disabled, HTML inputs return `ParseError::UnsupportedExtension`. |
+| `json` | off | Routes `.json` through a fenced code block extractor. Off by default. With the feature disabled, JSON inputs return `ParseError::UnsupportedExtension`. |
 
 ## Usage
 

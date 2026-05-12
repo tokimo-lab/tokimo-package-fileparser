@@ -10,8 +10,10 @@
 //!   format (`png`, `jpg`, `tif`, `emf`, etc.) when the source contains any.
 //!
 //! Supported extensions: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xlsm`, `.xls`,
-//! `.pptx`, `.ppt`, `.txt`, `.log`, `.csv`, `.tsv`,
-//! `.htm`, `.html`, `.json`.
+//! `.pptx`, `.ppt`, `.csv`, `.tsv`.
+//!
+//! Opt-in features: `.txt`/`.log` (`text`), `.htm`/`.html` (`html`),
+//! `.json` (`json`).
 //!
 //! All decoders are pure Rust — no C/C++ libs, no `pdfium`, no system fonts.
 
@@ -50,6 +52,7 @@ pub fn parse(input: impl AsRef<Path>, output_dir: impl AsRef<Path>) -> Result<Pa
         FileKind::Docx | FileKind::Xlsx | FileKind::Pptx | FileKind::Doc | FileKind::Xls | FileKind::Ppt => {
             office::extract_to_dir(input, &dest)?;
         }
+        #[cfg(feature = "text")]
         FileKind::Txt => {
             text::txt_to_dir(input, &dest)?;
         }
@@ -60,6 +63,7 @@ pub fn parse(input: impl AsRef<Path>, output_dir: impl AsRef<Path>) -> Result<Pa
         FileKind::Html => {
             text::html_to_dir(input, &dest)?;
         }
+        #[cfg(feature = "json")]
         FileKind::Json => {
             text::json_to_dir(input, &dest)?;
         }

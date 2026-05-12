@@ -11,10 +11,12 @@ pub enum FileKind {
     Doc,
     Xls,
     Ppt,
+    #[cfg(feature = "text")]
     Txt,
     Csv,
     #[cfg(feature = "html")]
     Html,
+    #[cfg(feature = "json")]
     Json,
 }
 
@@ -34,7 +36,14 @@ impl FileKind {
             "doc" => FileKind::Doc,
             "xls" => FileKind::Xls,
             "ppt" => FileKind::Ppt,
+            #[cfg(feature = "text")]
             "txt" | "log" => FileKind::Txt,
+            #[cfg(not(feature = "text"))]
+            "txt" | "log" => {
+                return Err(ParseError::UnsupportedExtension(format!(
+                    "{ext} (text support is gated behind the `text` cargo feature)"
+                )));
+            }
             "csv" | "tsv" => FileKind::Csv,
             #[cfg(feature = "html")]
             "htm" | "html" => FileKind::Html,
@@ -44,7 +53,14 @@ impl FileKind {
                     "{ext} (HTML support is gated behind the `html` cargo feature)"
                 )));
             }
+            #[cfg(feature = "json")]
             "json" => FileKind::Json,
+            #[cfg(not(feature = "json"))]
+            "json" => {
+                return Err(ParseError::UnsupportedExtension(format!(
+                    "{ext} (JSON support is gated behind the `json` cargo feature)"
+                )));
+            }
             other => return Err(ParseError::UnsupportedExtension(other.to_string())),
         })
     }

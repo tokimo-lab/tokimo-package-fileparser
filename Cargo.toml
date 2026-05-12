@@ -19,10 +19,16 @@ serde_json = "1"
 
 [features]
 default = []
+# Opt-in text support. Off by default — plain text files don't benefit from
+# structured parsing. Enable explicitly if you want .txt/.log support.
+text = []
 # Opt-in HTML support. Off by default — most callers don't want to misuse this
 # parser as an HTML scraper. Enable explicitly if you really do want .htm/.html
 # routed to a Markdown extractor.
 html = []
+# Opt-in JSON support. Off by default. Enable explicitly if you want .json
+# files parsed as fenced code blocks.
+json = []
 
 [dev-dependencies]
 tempfile = "3"
