@@ -1,0 +1,6 @@
+/target
+/Cargo.lock.bak
+
+# Local-only large binaries / scratch
+tests/fixtures/real/
+tests/out/

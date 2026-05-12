@@ -1,0 +1,32 @@
+[package]
+name = "tokimo-package-fileparser"
+version = "0.1.0"
+edition = "2024"
+description = "Pure-Rust unified file parser: PDF/DOCX/XLSX/PPTX/DOC/XLS/PPT/TXT/MD/CSV/HTML -> Markdown"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+office_oxide = "0.1"
+pdf-extract = "0.10"
+lopdf = "0.38"
+thiserror = "2"
+encoding_rs = "0.8"
+csv = "1"
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+default = []
+# Opt-in HTML support. Off by default — most callers don't want to misuse this
+# parser as an HTML scraper. Enable explicitly if you really do want .htm/.html
+# routed to a Markdown extractor.
+html = []
+
+[dev-dependencies]
+tempfile = "3"
+
+[[example]]
+name = "parse"
+path = "examples/parse.rs"
