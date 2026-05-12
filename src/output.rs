@@ -22,6 +22,10 @@ pub enum FileNode {
         name: String,
         path: PathBuf,
         size: u64,
+        /// Newline count for text-like files (currently `.md`); `None` for
+        /// binary / unsupported extensions.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lines: Option<u64>,
     },
     Dir {
         name: String,
@@ -57,10 +61,12 @@ fn build_tree(root: &Path, current: &Path) -> std::io::Result<FileNode> {
 
     let meta = fs::metadata(current)?;
     if meta.is_file() {
+        let lines = count_lines_if_text(current, &name);
         return Ok(FileNode::File {
             name,
             path: rel,
             size: meta.len(),
+            lines,
         });
     }
 
@@ -100,11 +106,16 @@ fn render_children(children: &[FileNode], prefix: &str, out: &mut String) {
         let connector = if last { "└── " } else { "├── " };
         let next_prefix = if last { "    " } else { "│   " };
         match child {
-            FileNode::File { name, size, .. } => {
+            FileNode::File { name, size, lines, .. } => {
                 out.push_str(prefix);
                 out.push_str(connector);
                 out.push_str(name);
-                out.push_str(&format!("  ({} B)", size));
+                out.push_str("  (");
+                out.push_str(&format_size(*size));
+                if let Some(n) = lines {
+                    out.push_str(&format!(", {n} lines"));
+                }
+                out.push(')');
                 out.push('\n');
             }
             FileNode::Dir { name, children, .. } => {
@@ -117,5 +128,47 @@ fn render_children(children: &[FileNode], prefix: &str, out: &mut String) {
                 render_children(children, &combined, out);
             }
         }
+    }
+}
+
+/// Human-readable byte size: `B` below 1 KiB, `KB` below 1 MiB, else `MB`.
+/// Uses 1024-based units (binary) and one decimal place for KB/MB.
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * KB;
+    if bytes < KB {
+        format!("{bytes} B")
+    } else if bytes < MB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    }
+}
+
+/// Count newlines for known text outputs (currently `.md`). Returns
+/// `None` for unsupported extensions or unreadable files (caller falls
+/// back to size-only rendering).
+fn count_lines_if_text(path: &Path, name: &str) -> Option<u64> {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    if ext != "md" {
+        return None;
+    }
+    let content = fs::read_to_string(path).ok()?;
+    Some(content.lines().count() as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_size_thresholds() {
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(999), "999 B");
+        assert_eq!(format_size(1023), "1023 B");
+        assert_eq!(format_size(1024), "1.0 KB");
+        assert_eq!(format_size(15922), "15.5 KB");
+        assert_eq!(format_size(1024 * 1024), "1.0 MB");
+        assert_eq!(format_size(5 * 1024 * 1024 + 512 * 1024), "5.5 MB");
     }
 }

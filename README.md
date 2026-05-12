@@ -56,10 +56,10 @@ println!("{}", output.dir.display());
 println!("{}", output.tree);
 //   report
 //   ├── images/
-//   │   ├── img-001.png  (123456 B)
-//   │   └── img-002.jpg  (98765 B)
-//   ├── page-001.md  (4321 B)
-//   ├── page-002.md  (5678 B)
+//   │   ├── img-001.png  (120.6 KB)
+//   │   └── img-002.jpg  (96.5 KB)
+//   ├── page-001.md  (4.2 KB, 87 lines)
+//   ├── page-002.md  (5.5 KB, 102 lines)
 //   └── …
 
 println!("{}", output.to_json_pretty());
