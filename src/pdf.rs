@@ -9,13 +9,18 @@ use crate::error::{ParseError, Result};
 pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     let mut written = Vec::new();
 
-    let pages = extract_pages_safe(input)?;
+    let mut pdf = PdfDoc::load(input).map_err(|e| ParseError::Pdf(e.to_string()))?;
+    if pdf.is_encrypted() {
+        pdf.decrypt("").map_err(|e| ParseError::Pdf(e.to_string()))?;
+    }
+
+    let pages = extract_pages_safe(&pdf)?;
     let pages = if pages.is_empty() { vec![String::new()] } else { pages };
 
     let images_dir = dest.join("images");
-    let extracted_images = extract_pdf_images(input, &images_dir).unwrap_or_default();
+    let extracted_images = extract_pdf_images(&pdf, &images_dir).unwrap_or_default();
     let embeds_dir = dest.join("embeddings");
-    let extracted_embeds = extract_pdf_embedded_files(input, &embeds_dir).unwrap_or_default();
+    let extracted_embeds = extract_pdf_embedded_files(&pdf, &embeds_dir).unwrap_or_default();
 
     for (i, page) in pages.iter().enumerate() {
         let path = dest.join(format!("page-{:03}.md", i + 1));
@@ -52,8 +57,7 @@ pub fn extract_to_dir(input: &Path, dest: &Path) -> Result<Vec<PathBuf>> {
     Ok(written)
 }
 
-fn extract_pdf_embedded_files(input: &Path, dest: &Path) -> Result<Vec<(String, String)>> {
-    let pdf = PdfDoc::load(input).map_err(|e| ParseError::Pdf(e.to_string()))?;
+fn extract_pdf_embedded_files(pdf: &PdfDoc, dest: &Path) -> Result<Vec<(String, String)>> {
     let mut out: Vec<(String, String)> = Vec::new();
     let mut counter: u32 = 0;
 
@@ -99,14 +103,25 @@ fn extract_pdf_embedded_files(input: &Path, dest: &Path) -> Result<Vec<(String, 
     Ok(out)
 }
 
-fn extract_pages_safe(path: &Path) -> Result<Vec<String>> {
-    let path_buf = path.to_path_buf();
+fn extract_pages_safe(pdf: &PdfDoc) -> Result<Vec<String>> {
     let extract_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        pdf_extract::extract_text_by_pages(&path_buf)
+        let page_map = pdf.get_pages();
+        let mut pages = Vec::with_capacity(page_map.len());
+        for page_num in page_map.keys() {
+            let mut page = String::new();
+            {
+                let mut output = pdf_extract::PlainTextOutput::new(&mut page);
+                // A single malformed page must not abort the whole document
+                // (mirrors pdf_extract::extract_text_by_pages' lenient walk):
+                // keep whatever text was captured before the error and move on.
+                let _ = pdf_extract::output_doc_page(pdf, &mut output, *page_num);
+            }
+            pages.push(page);
+        }
+        pages
     }));
     match extract_result {
-        Ok(Ok(pages)) => Ok(pages),
-        Ok(Err(e)) => Err(ParseError::Pdf(e.to_string())),
+        Ok(pages) => Ok(pages),
         Err(panic) => {
             let msg = panic_message(&panic);
             Err(ParseError::Pdf(format!(
@@ -128,9 +143,8 @@ fn panic_message(panic: &Box<dyn std::any::Any + Send>) -> String {
     }
 }
 
-fn extract_pdf_images(input: &Path, images_dir: &Path) -> Result<Vec<String>> {
-    let pdf = PdfDoc::load(input).map_err(|e| ParseError::Pdf(e.to_string()))?;
-    let image_to_page = build_image_page_map(&pdf);
+fn extract_pdf_images(pdf: &PdfDoc, images_dir: &Path) -> Result<Vec<String>> {
+    let image_to_page = build_image_page_map(pdf);
 
     let mut out: Vec<String> = Vec::new();
     let mut seen: HashSet<ObjectId> = HashSet::new();
